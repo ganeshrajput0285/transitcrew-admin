@@ -1,0 +1,48 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #1976d2;
+  padding: 10px 20px;
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-logo {
+  height: 45px;
+  width: 45px;
+  border-radius: 50%;             /* Makes the logo circular */
+  object-fit: cover;              /* Ensures the image is nicely cropped */
+  margin-right: 12px;
+  border: 2px solid white;        /* Optional: white border for better visibility */
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); /* Soft glow */
+  background-color: white;        /* Optional: white background for transparency logos */
+}
+
+.navbar-title {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: white;
+}
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 20px;
+}
+
+.nav-links li {
+  display: inline;
+}
+
+.nav-links a {
+  color: white;
+  text-decoration: none;
+  font-size: 1rem;
+}
+
+.nav-links a:hover {
+  text-decoration: underline;
+}
