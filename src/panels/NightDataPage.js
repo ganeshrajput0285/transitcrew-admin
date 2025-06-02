@@ -278,6 +278,7 @@ const allowances = NIGHT_ALLOWANCES.map(({ start, end }) => {
     };
 
     fetchData();
+ // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeId]);
 
   if (loading) return <CircularProgress />;

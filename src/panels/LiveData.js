@@ -249,6 +249,7 @@ console.log("Any Late Detected:", anyLate);
     stop();
     setAlarmPlaying(false);
   }
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, [schedule, records, mutedIds, currentTime]);
 
 
