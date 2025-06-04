@@ -74,39 +74,45 @@ const fetchOvertimeDetails = useCallback(async () => {
     ].join(':');
   }
 
-  const days = rosterData.map((r) => {
-    const rosterDate = dayjs(r.saved_date).format('YYYY-MM-DD');
+const days = rosterData.map((r) => {
+  const rosterDate = dayjs(r.saved_date).format('YYYY-MM-DD');
 
-    const sign = signData.find((s) =>
-      dayjs(s.sign_off_actual_time).format('YYYY-MM-DD') === rosterDate
-    );
+  const sign = signData.find((s) =>
+    dayjs(s.sign_on_actual_time).format('YYYY-MM-DD') === rosterDate
+  );
 
-    if (!sign || !sign.sign_off_actual_time) return null;
+  if (!sign || !sign.sign_on_actual_time || !sign.sign_off_actual_time) return null;
 
-    const paddedTime = padTime(r.sign_on_time);
-    const signOn = dayjs(`${rosterDate}T${paddedTime}`);
-    const signOff = dayjs(sign.sign_off_actual_time);
+  // Extract time-only from both sources
+  const signOnTimeStr = padTime(r.sign_on_time); // e.g. "08:00:00"
+  const signOffTimeStr = dayjs(sign.sign_off_actual_time).format('HH:mm:ss'); // e.g. "18:45:00"
 
-    if (!signOn.isValid() || !signOff.isValid()) {
-      console.warn('Invalid date:', {
-        signOn: r.sign_on_time,
-        signOff: sign.sign_off_actual_time,
-      });
-      return null;
-    }
+  // Parse both times as Dayjs objects on same dummy date
+  const baseDate = '2000-01-01'; // dummy date for duration calc
+  const signOn = dayjs(`${baseDate}T${signOnTimeStr}`);
+  const signOff = dayjs(`${baseDate}T${signOffTimeStr}`);
 
-    const diff = signOff.diff(signOn, 'minute');
-    const overtime = diff > 480 ? diff - 480 : 0;
-    totalOvertimeMinutes += overtime;
+  if (!signOn.isValid() || !signOff.isValid()) return null;
 
-    return {
-      date: dayjs(r.saved_date).format('DD/MM/YYYY'),
-      duty: r.duty_no,
-      signOn: paddedTime,
-      signOff: signOff.format('HH:mm:ss'),
-      overtime: formatMinutesToHHMMSS(overtime),
-    };
-  }).filter(Boolean);
+  // Handle overnight shifts (sign off after midnight)
+  let adjustedSignOff = signOff;
+  if (signOff.isBefore(signOn)) {
+    adjustedSignOff = signOff.add(1, 'day');
+  }
+
+  const diff = adjustedSignOff.diff(signOn, 'minute');
+  const overtime = diff > 480 ? diff - 480 : 0;
+  totalOvertimeMinutes += overtime;
+
+  return {
+    date: dayjs(r.saved_date).format('DD/MM/YYYY'),
+    duty: r.duty_no,
+    signOn: signOnTimeStr,
+    signOff: signOffTimeStr,
+    overtime: formatMinutesToHHMMSS(overtime),
+  };
+}).filter(Boolean);
+
 
   console.log('Parsed Days:', days);
 

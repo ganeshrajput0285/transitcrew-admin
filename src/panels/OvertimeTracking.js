@@ -31,6 +31,14 @@ const [selectedMonth, setSelectedMonth] = useState(null);
   const [search, setSearch] = useState('');
   const [ setSelectedEmployee] = useState(null);
 
+function formatMinutesToHMS(minutes) {
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.floor(minutes % 60);
+  const secs = Math.round((minutes * 60) % 60);
+  return `${hrs}h ${mins}m ${secs}s`;
+}
+
+
   useEffect(() => {
     fetchOvertimeData();
   }, []);
@@ -65,33 +73,35 @@ function padTime(t) {
   ].join(':');
 }
 
+
+
        
 const dailyRecords = userRoster.map(r => {
+  const rosterDate = dayjs(r.saved_date).format('YYYY-MM-DD');
+
   const sign = records.find(s =>
     s.employee_id === r.employee_id &&
-    dayjs(s.date).format('YYYY-MM-DD') === dayjs(r.duty_date).format('YYYY-MM-DD')
+    dayjs(s.sign_on_actual_time).format('YYYY-MM-DD') === rosterDate
   );
 
   if (!sign || !sign.sign_off_actual_time) return null;
 
   const paddedTime = padTime(r.sign_on_time);
-  const [hh, mm, ss] = paddedTime.split(':');
-
-  const signOn = dayjs(r.saved_date).hour(hh).minute(mm).second(ss || 0);
+  const signOn = dayjs(`${rosterDate}T${paddedTime}`);
   const signOff = dayjs(sign.sign_off_actual_time);
 
   if (!signOn.isValid() || !signOff.isValid()) {
-    console.warn('Invalid date:', { signOn: r.sign_on_time, signOff: sign.sign_off_actual_time });
+    console.warn('Invalid date:', { signOn, signOff });
     return null;
   }
 
-  const diff = signOff.diff(signOn, 'minute');
-  const overtime = diff > 480 ? diff - 480 : 0;
+  const workedMinutes = signOff.diff(signOn, 'minute');
+  const overtime = workedMinutes > 480 ? workedMinutes - 480 : 0;
 
   totalMinutes += overtime;
 
   return {
-    date: r.saved_date,
+    date: rosterDate,
     dutyNo: r.duty_no,
     signOnTime: r.sign_on_time,
     signOffTime: sign.sign_off_actual_time,
@@ -144,7 +154,7 @@ const dailyRecords = userRoster.map(r => {
   }
 
   const headers = ['Employee ID', 'Name', 'Total Overtime (min)'];
-  const rows = monthlyData.map(emp => [emp.employeeId, emp.name, emp.totalOvertime]);
+  const rows = monthlyData.map(emp => [emp.employeeId, emp.name, formatMinutesToHMS(emp.totalOvertime)]);
 
   generateOvertimePDF({
     title: `Overtime Summary - ${selectedMonthStr}`,
@@ -230,7 +240,7 @@ const dailyRecords = userRoster.map(r => {
     {emp.name}
   </Link>
 </TableCell>
-                <TableCell>{emp.totalOvertime}</TableCell>
+                <TableCell>{formatMinutesToHMS(emp.totalOvertime)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

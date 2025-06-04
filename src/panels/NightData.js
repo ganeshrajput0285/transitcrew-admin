@@ -25,7 +25,7 @@ const NIGHT_ALLOWANCES = [
   {
     label: "SignOn before 02:00 / SignOff after 01:00",
     rate: 175,
-    start: 21 * 60,
+    start: 19 * 60,
     end: 2 * 60,
   },
   {
