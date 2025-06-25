@@ -33,6 +33,12 @@ function RosterManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
  const [isDialogOpen, setIsDialogOpen] = useState(false);
+const [userEmail, setUserEmail] = useState(null);
+const [adminPassword, setAdminPassword] = useState("");
+const [authError, setAuthError] = useState("");
+const [authPromptVisible, setAuthPromptVisible] = useState(false);
+const [pendingEditIndex, setPendingEditIndex] = useState(null);
+const [pendingAction, setPendingAction] = useState(null); // 'edit' | 'move'
   const fileInputRef = useRef(null);
 
   const normalizeHeaders = (row) => {
@@ -57,6 +63,19 @@ function RosterManagement() {
     }
     return normalized;
   };
+
+useEffect(() => {
+  const getUser = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (data?.user) {
+      setUserEmail(data.user.email);
+    } else {
+      console.error("🔒 Not logged in or error getting user:", error);
+    }
+  };
+
+  getUser();
+}, []);
 
   useEffect(() => {
     const fetchRoster = async () => {
@@ -201,10 +220,80 @@ function RosterManagement() {
     }
   };
 
-  const handleEdit = (index) => {
-    setEditIndex(index);
-    setEditedRow({ ...filteredSchedule[index] });
-  };
+const handleEdit = async (index) => {
+  const row = filteredSchedule[index];
+
+  if (!row.employee_id) {
+    alert("❌ Missing employee ID or duty number.");
+    return;
+  }
+
+  // Get today's date range
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const startOfDay = `${yyyy}-${mm}-${dd}T00:00:00.000Z`;
+  const endOfDay = `${yyyy}-${mm}-${dd}T23:59:59.999Z`;
+
+  // Query sign_on_off_records to check if sign-on already happened today
+  const { data, error } = await supabase
+    .from("sign_on_off_records")
+    .select("sign_on_actual_time")
+    .eq("employee_id", row.employee_id)
+    .gte("sign_on_actual_time", startOfDay)
+    .lte("sign_on_actual_time", endOfDay)
+    .not("sign_on_actual_time", "is", null)
+    .limit(1);
+
+  if (error) {
+    console.error("❌ Error checking sign-on record:", error);
+    alert("❌ Failed to check sign-on status.");
+    return;
+  }
+
+  if (data && data.length > 0) {
+    alert("❌ Cannot edit. Sign-on already done for this employee today.");
+    return;
+  }
+
+  // No sign-on record today → prompt for admin password
+  setAuthPromptVisible(true);
+  setPendingEditIndex(index);
+};
+
+
+const verifyPassword = async () => {
+  if (!userEmail) {
+    setAuthError("❌ Could not retrieve user. Please log in again.");
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: userEmail,
+    password: adminPassword,
+  });
+
+  if (error) {
+    setAuthError("❌ Incorrect password. Try again.");
+    return;
+  }
+
+ if (pendingAction === "edit") {
+    setEditIndex(pendingEditIndex);
+    setEditedRow({ ...filteredSchedule[pendingEditIndex] });
+  } else if (pendingAction === "move") {
+    await performMoveToFinalRoster();
+  }
+
+  // Reset auth dialog
+  setAuthPromptVisible(false);
+  setAdminPassword("");
+  setAuthError("");
+  setPendingAction(null);
+};
+
+
 
   const handleEditChange = (field, value) => {
     setEditedRow((prev) => ({ ...prev, [field]: value }));
@@ -275,57 +364,62 @@ function RosterManagement() {
     setEditedRow({});
     alert("✅ Row updated successfully!");
   };
-// New function to move data from roster_schedule to final_roster
-  const handleChange = async () => {
-    setLoading(true);
 
-    // Insert all the data from roster_schedule into final_roster table
-    const { data, error } = await supabase
-      .from("roster_schedule")
-      .select("*");
 
-    if (error) {
-      console.error("❌ Error fetching roster schedule:", error);
-      alert("Failed to move roster data.");
-      setLoading(false);
-      return;
-    }
+const handleProtectedMove = () => {
+  setPendingAction("move");
+  setAuthPromptVisible(true);
+};
 
-    const moveData = data.map((row) => ({
-      employee_id: row.employee_id,
-      employee_name: row.employee_name,
-      duty_no: row.duty_no,
-      sign_on_time: row.sign_on_time,
-      sign_on_location: row.sign_on_location,
-      sign_off_time: row.sign_off_time,
-      sign_off_location: row.sign_off_location,
-    }));
 
-    const { error: insertError } = await supabase
-      .from("final_roster")
-      .insert(moveData);
+const performMoveToFinalRoster = async () => {
+  setLoading(true);
 
-    if (insertError) {
-      console.error("❌ Error moving data to final roster:", insertError);
-      alert("Failed to move roster data.");
-    } else {
-      alert("✅ Roster data moved to final roster!");
-      const { error: deleteError } = await supabase
-        .from("roster_schedule")
-        .delete()
-        .neq("employee_id", "");
-
-      if (deleteError) {
-        console.error("❌ Error deleting roster schedule:", deleteError);
-        alert("❌ Failed to clear roster schedule.");
-      } else {
-        setSchedule([]);
-        setFilteredSchedule([]);
-      }
-    }
-
+  const { data, error } = await supabase.from("roster_schedule").select("*");
+  if (error) {
+    console.error("❌ Error fetching roster schedule:", error);
+    alert("Failed to move roster data.");
     setLoading(false);
-  };
+    return;
+  }
+
+  const moveData = data.map((row) => ({
+    employee_id: row.employee_id,
+    employee_name: row.employee_name,
+    duty_no: row.duty_no,
+    sign_on_time: row.sign_on_time,
+    sign_on_location: row.sign_on_location,
+    sign_off_time: row.sign_off_time,
+    sign_off_location: row.sign_off_location,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("final_roster")
+    .insert(moveData);
+
+  if (insertError) {
+    console.error("❌ Error moving data to final roster:", insertError);
+    alert("Failed to move roster data.");
+  } else {
+    alert("✅ Roster data moved to final roster!");
+
+    const { error: deleteError } = await supabase
+      .from("roster_schedule")
+      .delete()
+      .neq("employee_id", "");
+
+    if (deleteError) {
+      console.error("❌ Error deleting roster schedule:", deleteError);
+      alert("❌ Failed to clear roster schedule.");
+    } else {
+      setSchedule([]);
+      setFilteredSchedule([]);
+    }
+  }
+
+  setLoading(false);
+};
+
 
   return (
     <Container sx={{ marginTop: 4 }}>
@@ -496,11 +590,31 @@ function RosterManagement() {
       )}
  {schedule.length > 0 && (
         <Box sx={{ mt: 4, textAlign: "center" }}>
-          <Button variant="contained" onClick={handleChange}>
+          <Button variant="contained" onClick={handleProtectedMove}>
             Move to Final Roster
           </Button>
         </Box>
       )}
+
+<Dialog open={authPromptVisible} onClose={() => setAuthPromptVisible(false)}>
+  <DialogTitle>Admin Password Required</DialogTitle>
+  <DialogContent>
+    <TextField
+      type="password"
+      label="Enter your Password"
+      fullWidth
+      value={adminPassword}
+      onChange={(e) => setAdminPassword(e.target.value)}
+      error={!!authError}
+      helperText={authError}
+    />
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setAuthPromptVisible(false)}>Cancel</Button>
+    <Button variant="contained" onClick={verifyPassword}>Verify</Button>
+  </DialogActions>
+</Dialog>
+
 
      <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
         <DialogTitle>Select Date to Download PDF</DialogTitle>

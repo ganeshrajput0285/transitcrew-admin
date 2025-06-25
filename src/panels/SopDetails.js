@@ -77,8 +77,26 @@ const SopDetails = () => {
     fetchSopData();
   }, [sopId]);
 
-  const formatAcknowledgmentDate = (date) =>
-    date ? new Date(date).toLocaleString() : "Pending";
+const formatAcknowledgmentDate = (utcDateStr) => {
+  if (!utcDateStr) return "Pending";
+
+  const utcDate = new Date(utcDateStr);
+
+  // Convert to IST by adding +5:30 offset (19800 seconds)
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(utcDate.getTime() + istOffsetMs);
+
+  return istDate.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+};
+
 
   const filteredEmployees = employeeList.filter((emp) =>
     emp.employee_id.toString().includes(searchQuery) ||

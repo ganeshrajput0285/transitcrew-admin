@@ -12,6 +12,11 @@ function EmployeesSection() {
   const [employees, setEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [editData, setEditData] = useState(null);
+const [authPromptVisible, setAuthPromptVisible] = useState(false);
+const [adminPassword, setAdminPassword] = useState("");
+const [authError, setAuthError] = useState("");
+const [pendingAction, setPendingAction] = useState(null); // { type: "edit" | "delete", payload: any }
+
 
   useEffect(() => {
     fetchEmployees();
@@ -22,22 +27,64 @@ function EmployeesSection() {
     if (!error) setEmployees(data);
   };
 
-  const handleRemove = async (id) => {
-    const confirmDelete = window.confirm("Are you sure you want to remove this employee?");
-    if (confirmDelete) {
-      const { error } = await supabase.from("employees").delete().eq("id", id);
-      if (!error) {
-        setEmployees(employees.filter(emp => emp.id !== id));
-        alert("Employee removed!");
-      } else {
-        alert("Error removing employee");
-      }
-    }
-  };
+ const handleRemove = (id) => {
+  setPendingAction({ type: "delete", payload: id });
+  setAuthPromptVisible(true);
+};
 
   const handleEditOpen = (emp) => {
-    setEditData(emp);
-  };
+  setPendingAction({ type: "edit", payload: emp });
+  setAuthPromptVisible(true);
+};
+
+const handleVerifyPassword = async () => {
+  const user = await supabase.auth.getUser();
+  const email = user?.data?.user?.email;
+
+  if (!email) {
+    setAuthError("User not authenticated.");
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password: adminPassword,
+  });
+
+  if (error) {
+    setAuthError("❌ Incorrect password.");
+    return;
+  }
+
+  // Auth successful – proceed based on pendingAction
+  if (pendingAction?.type === "edit") {
+    setEditData(pendingAction.payload);
+  } else if (pendingAction?.type === "delete") {
+    const id = pendingAction.payload;
+
+  const confirmDelete = window.confirm("Are you sure you want to remove this employee?");
+  if (!confirmDelete) {
+    // Cancel the action if user says "Cancel"
+    setPendingAction(null);
+    return;
+  }
+
+    const { error } = await supabase.from("employees").delete().eq("id", id);
+    if (!error) {
+      setEmployees((prev) => prev.filter(emp => emp.id !== id));
+      alert("✅ Employee removed.");
+    } else {
+      alert("❌ Failed to remove employee.");
+    }
+  }
+
+  // Cleanup
+  setAuthPromptVisible(false);
+  setAdminPassword("");
+  setAuthError("");
+  setPendingAction(null);
+};
+
 
   const handleEditChange = (field, value) => {
     setEditData({ ...editData, [field]: value });
@@ -114,6 +161,26 @@ function EmployeesSection() {
           </Table>
         </TableContainer>
       )}
+
+<Dialog open={authPromptVisible} onClose={() => setAuthPromptVisible(false)}>
+  <DialogTitle>Admin Password Required</DialogTitle>
+  <DialogContent>
+    <TextField
+      type="password"
+      label="Enter Admin Password"
+      fullWidth
+      value={adminPassword}
+      onChange={(e) => setAdminPassword(e.target.value)}
+      error={!!authError}
+      helperText={authError}
+    />
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setAuthPromptVisible(false)}>Cancel</Button>
+    <Button variant="contained" onClick={handleVerifyPassword}>Verify</Button>
+  </DialogActions>
+</Dialog>
+
 
       {/* Edit Modal */}
       {editData && (
