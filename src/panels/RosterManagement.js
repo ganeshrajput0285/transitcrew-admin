@@ -260,6 +260,7 @@ const handleEdit = async (index) => {
   // No sign-on record today → prompt for admin password
   setAuthPromptVisible(true);
   setPendingEditIndex(index);
+  setPendingAction("edit");
 };
 
 
