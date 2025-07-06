@@ -392,6 +392,7 @@ const performMoveToFinalRoster = async () => {
     sign_on_location: row.sign_on_location,
     sign_off_time: row.sign_off_time,
     sign_off_location: row.sign_off_location,
+    saved_date: new Date().toISOString(),
   }));
 
   const { error: insertError } = await supabase
