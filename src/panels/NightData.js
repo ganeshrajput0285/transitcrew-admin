@@ -41,7 +41,7 @@ const NIGHT_ALLOWANCES = [
     end: 4 * 60,
   },
   {
-    label: "SignOn before 05:00 / SignOff after 23:00",
+    label: "SignOn before 05:00 / SignOff after 22:00",
     rate: 90,
     start: 4 * 60 + 1,
     end: 5 * 60,
@@ -70,6 +70,7 @@ function matchNightAllowance(record) {
 
   const signOn = new Date(record.sign_on_actual_time);
   const signOff = new Date(record.sign_off_actual_time);
+  const res = [0, 0, 0, 0];
 
   if (isNaN(signOn.getTime()) || isNaN(signOff.getTime())) {
     return [0, 0, 0, 0];
@@ -78,20 +79,35 @@ function matchNightAllowance(record) {
   const signOnMinutes = timeToMinutes(signOn);
   const signOffMinutes = timeToMinutes(signOff);
 
-  for (let i = 0; i < NIGHT_ALLOWANCES.length; i++) {
-    const tier = NIGHT_ALLOWANCES[i];
-    const signOnMatch = isInRange(signOnMinutes, tier.start, tier.end);
-    const signOffMatch = isInRange(signOffMinutes, tier.start, tier.end);
-
-    if (signOnMatch || signOffMatch) {
-      const res = [0, 0, 0, 0];
-      res[i] = 1;
-      return res;
-    }
+  // ₹175 strict rule
+  if (
+    isInRange(signOnMinutes, NIGHT_ALLOWANCES[0].start, NIGHT_ALLOWANCES[0].end) &&
+    signOffMinutes >= 60 && signOffMinutes <= 420 // 1:00 AM to 7:00 AM
+  ) {
+    res[0] = 1;
   }
 
-  return [0, 0, 0, 0];
+  // ₹140
+  const match140 =
+    (signOnMinutes >= 121 && signOnMinutes <= 180) ||
+    (signOffMinutes >= 0 && signOffMinutes <= 59);
+  if (match140) res[1] = 1;
+
+  // ₹120
+  const match120 =
+    (signOnMinutes >= 181 && signOnMinutes <= 240) ||
+    (signOffMinutes >= 1380 && signOffMinutes <= 1439);
+  if (match120) res[2] = 1;
+
+  // ₹90
+  const match90 =
+    (signOnMinutes >= 241 && signOnMinutes <= 300) ||
+    (signOffMinutes >= 1320 && signOffMinutes <= 1379);
+  if (match90) res[3] = 1;
+
+  return res;
 }
+
 
 
 // Compute night allowance breakdown and total for an employee

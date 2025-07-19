@@ -15,6 +15,7 @@ import {
   IconButton,
 } from "@mui/material";
 import ImageIcon from "@mui/icons-material/Image";
+import DeleteIcon from "@mui/icons-material/Delete";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../supabaseClient"; // Adjust path as needed
@@ -71,6 +72,7 @@ const SOPManagement = () => {
         name: file.name,
         uploaded_at: new Date().toISOString(),
         file_type: file.type,
+        file_path: filePath,
         document_url: publicURLData.publicUrl,
         target_employees: "all", // You can modify this based on specific employee assignment
       };
@@ -119,6 +121,48 @@ const SOPManagement = () => {
     navigate(`/sop-details/${sopId}/${sopName}`);
   };
 
+const handleDeleteSop = async (id, filePath) => {
+ if (!filePath) {
+    console.error("Missing file path, cannot delete");
+    return;
+  }
+
+
+  const confirmed = window.confirm("Are you sure you want to delete this SOP and its file?");
+  if (!confirmed) return;
+
+  try {
+    // 1. Delete the file from Supabase Storage
+    const { error: storageError } = await supabase
+      .storage
+      .from("sops") // 🔁 replace with your actual bucket name
+      .remove([filePath]);
+
+    if (storageError) {
+      console.error("Failed to delete file from storage:", storageError.message);
+      return;
+    }
+
+    // 2. Delete the record from the table
+    const { error: dbError } = await supabase
+      .from("sop_documents") // 🔁 replace with your table name
+      .delete()
+      .eq("id", id);
+
+    if (dbError) {
+      console.error("Failed to delete SOP record:", dbError.message);
+      return;
+    }
+
+    // 3. Remove it from UI
+    setSopList(prev => prev.filter((item) => item.id !== id));
+    alert("SOP and file deleted successfully!");
+  } catch (err) {
+    console.error("Unexpected error:", err);
+  }
+};
+
+
   return (
     <Container sx={{ marginTop: 4 }}>
       <Typography variant="h4" gutterBottom>
@@ -151,6 +195,7 @@ const SOPManagement = () => {
               <TableRow>
                 <TableCell sx={{ fontWeight: "bold" }}>File</TableCell>
                 <TableCell sx={{ fontWeight: "bold" }}>Uploaded At</TableCell>
+                <TableCell><strong>Action</strong></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -174,6 +219,22 @@ const SOPManagement = () => {
                     <TableCell>
                       {new Date(sop.uploaded_at).toLocaleString()}
                     </TableCell>
+                     <TableCell>
+        <IconButton
+          aria-label="delete"
+          color="error"
+         onClick={() => {
+      if (sop.file_path) {
+        handleDeleteSop(sop.id, sop.file_path);
+      } else {
+        console.error("Missing file path for deletion:", sop);
+        alert("Cannot delete file: file path is missing.");
+      }
+    }}
+  >
+          <DeleteIcon />
+        </IconButton>
+      </TableCell>
                   </TableRow>
                 ))
               )}

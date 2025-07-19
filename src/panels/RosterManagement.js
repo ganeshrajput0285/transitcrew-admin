@@ -176,13 +176,28 @@ useEffect(() => {
         const rawData = XLSX.utils.sheet_to_json(sheet);
         const parsedData = rawData.map(normalizeHeaders);
 
-        const cleanData = parsedData.filter(
-          (row) =>
-            row.employee_id &&
-            row.employee_name &&
-            row.duty_no &&
-            row.sign_on_time
-        );
+       const filteredData = parsedData.filter(
+        (row) =>
+          row.employee_id &&
+          row.employee_name &&
+          row.duty_no &&
+          row.sign_on_time
+      );
+
+     function convertExcelTimeToTimeString(excelTime) {
+  if (typeof excelTime !== 'number') return excelTime; // Skip if already a string
+  const totalSeconds = Math.round(86400 * excelTime);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+ 
+  const cleanData = filteredData.map((row) => ({
+        ...row,
+        sign_on_time: convertExcelTimeToTimeString(row.sign_on_time),
+        sign_off_time: convertExcelTimeToTimeString(row.sign_off_time),
+      }));
+
 
         const { error } = await supabase.from("roster_schedule").insert(cleanData);
 
@@ -371,6 +386,39 @@ const handleProtectedMove = () => {
   setPendingAction("move");
   setAuthPromptVisible(true);
 };
+
+const handleDeleteRow = async (index) => {
+  const rowToDelete = filteredSchedule[index];
+  const confirmDelete = window.confirm(
+    `Are you sure you want to delete duty of Employee ID ${rowToDelete.employee_id}?`
+  );
+
+  if (!confirmDelete) return;
+
+  const { error } = await supabase
+    .from("roster_schedule")
+    .delete()
+    .eq("employee_id", rowToDelete.employee_id);
+
+  if (error) {
+    console.error("❌ Delete error:", error);
+    alert("❌ Failed to delete row.");
+    return;
+  }
+
+  // Update UI
+  const updated = [...filteredSchedule];
+  updated.splice(index, 1);
+  setFilteredSchedule(updated);
+  setSchedule((prev) =>
+    prev.filter((row) => row.employee_id !== rowToDelete.employee_id)
+  );
+
+  setEditIndex(null); // exit edit mode
+  setEditedRow({});
+  alert("✅ Row deleted successfully.");
+};
+
 
 
 const performMoveToFinalRoster = async () => {
@@ -568,6 +616,9 @@ const performMoveToFinalRoster = async () => {
                         <Button onClick={handleCancelEdit} color="error">
                           Cancel
                         </Button>
+                     <Button onClick={() => handleDeleteRow(index)} variant="contained" color="error">
+    Delete
+  </Button>
                       </TableCell>
                     </>
                   ) : (

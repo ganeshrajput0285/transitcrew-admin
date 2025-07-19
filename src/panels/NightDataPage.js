@@ -201,14 +201,18 @@ const rosterDate = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateO
 
          const savedDateObj = new Date(roster.saved_date);
 
-const matchingRecord = recordsData
-  .filter((record) => record.employee_id === roster.employee_id && record.sign_on_actual_time)
-  .map((record) => {
-    const actualDate = new Date(record.sign_on_actual_time);
-    const diff = Math.abs(actualDate - savedDateObj);
-    return { ...record, dateDiff: diff };
-  })
-  .sort((a, b) => a.dateDiff - b.dateDiff)[0]; // closest match
+const matchingRecord = recordsData.find((record) => {
+  if (!record.sign_on_actual_time) return false;
+
+  const actualDate = new Date(record.sign_on_actual_time);
+  const rosterDate = new Date(roster.saved_date);
+
+  return (
+    actualDate.getDate() === rosterDate.getDate() &&
+    actualDate.getMonth() === rosterDate.getMonth() &&
+    actualDate.getFullYear() === rosterDate.getFullYear()
+  );
+});
 
 
           const signOnActual = matchingRecord?.sign_on_actual_time
@@ -218,22 +222,70 @@ const matchingRecord = recordsData
             ? new Date(matchingRecord.sign_off_actual_time)
             : null;
 
-          const getMinutesFromMidnight = (date) =>
+         // Utility to convert time to minutes since midnight
+const getMinutesFromMidnight = (date) =>
   date.getHours() * 60 + date.getMinutes();
 
-const allowances = NIGHT_ALLOWANCES.map(({ start, end }) => {
-  if (!signOnActual || !signOffActual) return 0;
+// Allowance calculations with updated rules
+const calculateAllowances = (signOnActual, signOffActual) => {
+  let allowance_1 = 0, allowance_2 = 0, allowance_3 = 0, allowance_4 = 0;
 
-  const signOnMinutes = getMinutesFromMidnight(signOnActual);
-  const signOffMinutes = getMinutesFromMidnight(signOffActual);
+  if (signOnActual && signOffActual) {
+    const onMins = getMinutesFromMidnight(signOnActual);
+    const offMins = getMinutesFromMidnight(signOffActual);
 
-  return isInRange(signOnMinutes, start, end) || isInRange(signOffMinutes, start, end) ? 1 : 0;
-});
+    // ₹175 allowance
+    const is175SignOn = (onMins >= 1140 || onMins <= 120); // 19:00–02:00
+    const is175SignOff = (offMins >= 60 && offMins <= 420); // 01:00–07:00
+    if (is175SignOn && !is175SignOff) allowance_1 = 1;
+    else if (!is175SignOn && is175SignOff) allowance_1 = 1;
+    else if (is175SignOn && is175SignOff) {
+      const onDist = Math.min(Math.abs(onMins - 1140), Math.abs((onMins > 720 ? onMins : onMins + 1440) - 1140));
+      const offDist = Math.min(Math.abs(offMins - 60), Math.abs(offMins - 420));
+      allowance_1 = onDist <= offDist ? 1 : 1;
+    }
 
-          const totalAmount = allowances.reduce(
-            (sum, val, idx) => sum + val * NIGHT_ALLOWANCES[idx].rate,
-            0
-          );
+    // ₹140 allowance
+    const is140SignOn = (onMins >= 121 && onMins <= 180); // 02:01–03:00
+    const is140SignOff = (offMins >= 0 && offMins <= 59); // 00:00–00:59
+    if (is140SignOn && !is140SignOff) allowance_2 = 1;
+    else if (!is140SignOn && is140SignOff) allowance_2 = 1;
+    else if (is140SignOn && is140SignOff) {
+      const onDist = Math.abs(onMins - 150);
+      const offDist = Math.abs(offMins - 30);
+      allowance_2 = onDist <= offDist ? 1 : 1;
+    }
+
+    // ₹120 allowance
+    const is120SignOn = (onMins >= 181 && onMins <= 240); // 03:01–04:00
+    const is120SignOff = (offMins >= 1380 && offMins <= 1439); // 23:00–23:59
+    if (is120SignOn && !is120SignOff) allowance_3 = 1;
+    else if (!is120SignOn && is120SignOff) allowance_3 = 1;
+    else if (is120SignOn && is120SignOff) {
+      const onDist = Math.abs(onMins - 210);
+      const offDist = Math.abs(offMins - 1410);
+      allowance_3 = onDist <= offDist ? 1 : 1;
+    }
+
+    // ₹90 allowance
+    const is90SignOn = (onMins >= 241 && onMins <= 300); // 04:01–05:00
+    const is90SignOff = (offMins >= 1320 && offMins <= 1379); // 22:00–22:59
+    if (is90SignOn && !is90SignOff) allowance_4 = 1;
+    else if (!is90SignOn && is90SignOff) allowance_4 = 1;
+    else if (is90SignOn && is90SignOff) {
+      const onDist = Math.abs(onMins - 270);
+      const offDist = Math.abs(offMins - 1410);
+      allowance_4 = onDist <= offDist ? 1 : 1;
+    }
+  }
+
+  return { allowance_1, allowance_2, allowance_3, allowance_4 };
+};
+
+
+         const { allowance_1, allowance_2, allowance_3, allowance_4 } = calculateAllowances(signOnActual, signOffActual);
+
+const totalAmount = allowance_1 * 175 + allowance_2 * 140 + allowance_3 * 120 + allowance_4 * 90;
 
           return {
             id: rosterDate,
@@ -260,10 +312,10 @@ const allowances = NIGHT_ALLOWANCES.map(({ start, end }) => {
     timeZone: 'Asia/Kolkata', // Optional: shows IST instead of UTC
   }) : '',
             sign_off_actual_location: matchingRecord?.sign_off_actual_location || '',
-            allowance_1: allowances[0],
-            allowance_2: allowances[1],
-            allowance_3: allowances[2],
-            allowance_4: allowances[3],
+            allowance_1,
+            allowance_2,
+            allowance_3,
+            allowance_4,
             total_amount: totalAmount,
           };
         });
@@ -378,7 +430,7 @@ const allowances = NIGHT_ALLOWANCES.map(({ start, end }) => {
     fontWeight: 'bold',
     backgroundColor: '#f0f4ff', // light blue or any other color
     color: '#1a237e' // dark blue text for contrast
-  }}>SignOn before 05:00 / SignOff after 23:00</TableCell>
+  }}>SignOn before 05:00 / SignOff after 22:00</TableCell>
                 <TableCell align="center" rowSpan={2} sx={{
     fontWeight: 'bold',
     backgroundColor: '#f0f4ff', // light blue or any other color

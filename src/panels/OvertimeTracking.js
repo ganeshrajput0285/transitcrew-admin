@@ -64,6 +64,8 @@ function formatMinutesToHMS(minutes) {
 
         let totalMinutes = 0;
 
+   console.log(`\n🔍 Calculating for Employee: ${emp.name} (${emp.employee_id})`);
+
 function padTime(t) {
   const [h, m, s] = t.split(':');
   return [
@@ -79,16 +81,25 @@ function padTime(t) {
 const dailyRecords = userRoster.map(r => {
   const rosterDate = dayjs(r.saved_date).format('YYYY-MM-DD');
 
-  const sign = records.find(s =>
-    s.employee_id === r.employee_id &&
-    dayjs(s.sign_on_actual_time).format('YYYY-MM-DD') === rosterDate
-  );
+ const sign = records.find(s =>
+  s.employee_id === r.employee_id &&
+  dayjs(s.sign_on_actual_time).format('YYYY-MM-DD') === rosterDate &&
+  !!s.sign_off_actual_time
+);
 
-  if (!sign || !sign.sign_off_actual_time) return null;
+
+
+
+  if (!sign || !sign.sign_off_actual_time) {
+      console.warn(`⚠️ Missing or incomplete sign record for ${emp.employee_id} on ${rosterDate}`);
+      return null;
+    }
 
   const paddedTime = padTime(r.sign_on_time);
+
   const signOn = dayjs(`${rosterDate}T${paddedTime}`);
   const signOff = dayjs(sign.sign_off_actual_time);
+
 
   if (!signOn.isValid() || !signOff.isValid()) {
     console.warn('Invalid date:', { signOn, signOff });
@@ -100,6 +111,16 @@ const dailyRecords = userRoster.map(r => {
 
   totalMinutes += overtime;
 
+ console.log(`📅 Date: ${rosterDate}`);
+    console.log(`   - Duty No: ${r.duty_no}`);
+    console.log(`   - Scheduled Sign-On: ${paddedTime}`);
+    console.log(`   - Actual Sign-Off: ${sign.sign_off_actual_time}`);
+    console.log(`   - Worked: ${workedMinutes} min`);
+    console.log(`   - Overtime: ${overtime} min`);
+     
+   
+
+
   return {
     date: rosterDate,
     dutyNo: r.duty_no,
@@ -108,6 +129,11 @@ const dailyRecords = userRoster.map(r => {
     overtimeMinutes: Math.round(overtime)
   };
 }).filter(Boolean);
+
+console.log(`✅ Total Overtime for ${emp.name} (${emp.employee_id}): ${totalMinutes} minutes\n`);
+console.log(`📋 Daily Overtimes for ${emp.name} (${emp.employee_id}):`, dailyRecords.map(d => d.overtimeMinutes));
+console.log(`🔢 Accumulated TotalMinutes BEFORE ROUND: ${totalMinutes}`);
+console.log(`✅ Total Overtime for ${emp.name} (${emp.employee_id}): ${Math.round(totalMinutes)} minutes\n`);
 
 
         return {

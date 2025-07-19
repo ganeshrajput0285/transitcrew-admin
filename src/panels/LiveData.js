@@ -13,11 +13,15 @@ import {
   Paper,
   Grid,
   Avatar,
+FormControl,
+ MenuItem,
   Stack,
   Chip, TableCell, TableContainer,
   TableHead, TableRow,
 Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField
 } from '@mui/material';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+
 
 import { supabase } from '../supabaseClient';
 
@@ -27,7 +31,6 @@ const blinkRed = keyframes`
   50% { background-color: #ffcdd2; }
   100% { background-color: #ef9a9a; }
 `;
-
 
 
 
@@ -67,6 +70,36 @@ const isLate = (row) => {
   return actualSignOn.isAfter(scheduledSignOn); // Late if actual > scheduled
 };
 
+
+const [manualSignOffDialogOpen, setManualSignOffDialogOpen] = useState(false);
+  const [signOffFormData, setSignOffFormData] = useState({
+    ba_result: '',
+    ba_number: '',
+    sign_off_time: dayjs(),
+    sign_off_location: ''
+  });
+const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+
+ const handleFormChange = (field, value) => {
+    setSignOffFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+
+const isSignOffDue = (employee_id) => {
+  const duty = roster.find(r => r.employee_id === employee_id);
+  if (!duty || !duty.sign_off_time) return false;
+  const [hour, minute] = duty.sign_off_time.split(':');
+  const today = dayjs();
+  const dueTime = today.hour(Number(hour)).minute(Number(minute));
+  return dayjs().isAfter(dueTime);
+}; 
+
+const handleManualSignOffChange = (e) => {
+  setSignOffFormData(prev => ({
+    ...prev,
+    [e.target.name]: e.target.value,
+  }));
+};
 
 
 
@@ -341,6 +374,9 @@ const formatTime = (input) => {
   });
 
 
+const sortedUpcomingDuties = [...upcomingDuties].sort(
+  (a, b) => new Date(a.sign_on_time) - new Date(b.sign_on_time)
+);
 
 
 
@@ -400,9 +436,10 @@ const formatTime = (input) => {
             No Upcoming Duties
           </Typography>
         ) : (
+        
           <Grid container spacing={3}>
-     {upcomingDuties.map((row, idx) => {
-  const late = isLate(row); // records should be passed in as a prop or available in context
+      {sortedUpcomingDuties.map((row, idx) => {
+        const late = isLate(row); // records should be passed in as a prop or available in context
   return (
     <Grid item xs={12} md={6} lg={4} key={row.employee_id}>
       <Paper
@@ -456,9 +493,11 @@ const formatTime = (input) => {
   );
 })}
 
+
           </Grid>
         )}
       </Paper>
+    
 
 <Dialog open={actionDialogOpen} onClose={() => setActionDialogOpen(false)}>
   <DialogTitle>Actions for {selectedRow?.employee_name}</DialogTitle>
@@ -529,7 +568,9 @@ const formatTime = (input) => {
           <Grid container spacing={3}>
            {signOns
   .filter((rec) => !rec.sign_off_actual_time)
-  .map((rec, idx) => (
+  .map((rec, idx) => {
+    const showManualButton = isSignOffDue(rec.employee_id);
+    return (
               <Grid item xs={12} md={6} lg={4} key={rec.employee_id + idx}>
                 <Paper
                   elevation={2}
@@ -566,14 +607,123 @@ const formatTime = (input) => {
 <Typography variant="body2" color="text.secondary">
   Sign-On Location: {rec.sign_on_actual_location || '-'}
 </Typography>
-
-                  </Box>
-                </Paper>
-              </Grid>
-            ))}
+ {showManualButton && (
+            <Box mt={2}>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() => {
+                  setSelectedRow(rec);
+                  setManualSignOffDialogOpen(true);
+                }}
+              >
+                Manual Sign-Off
+              </Button>
+                   </Box>
+              )}
+            </Box>
+          </Paper>
+        </Grid>
+      );
+    })}
           </Grid>
         )}
       </Paper>
+
+
+<Dialog open={manualSignOffDialogOpen} onClose={() => setManualSignOffDialogOpen(false)}>
+  <DialogTitle>Manual Sign-Off for {selectedRow?.employee_name}</DialogTitle>
+  <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <TextField
+       select
+  fullWidth
+  label="BA Result"
+  name="ba_result"
+  value={signOffFormData.ba_result}
+  onChange={handleManualSignOffChange}
+  sx={{ mb: 2 }}
+>
+  <MenuItem value="Positive">Positive</MenuItem>
+  <MenuItem value="Negative">Negative</MenuItem>
+</TextField>
+    <TextField
+      label="Sign-Off BA Number"
+      value={signOffFormData.ba_number}
+          onChange={(e) => handleFormChange('ba_number', e.target.value)}
+        
+      fullWidth
+    />
+    <TextField
+      label="Sign-Off Location"
+      value={signOffFormData.sign_off_location}
+          onChange={(e) => handleFormChange('sign_off_location', e.target.value)}
+        
+      fullWidth
+    />
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <DateTimePicker
+        label="Sign-Off Time"
+        value={signOffFormData.sign_off_time}
+         onChange={(newValue) => setSignOffFormData(prev => ({
+    ...prev,
+    sign_off_time: newValue
+  }))}
+  renderInput={(params) => <TextField {...params} fullWidth sx={{ mt: 2 }} />}
+/>
+      
+    </LocalizationProvider>
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setManualSignOffDialogOpen(false)}>Cancel</Button>
+    <Button onClick={() => {
+      setManualSignOffDialogOpen(false);
+      setConfirmDialogOpen(true);
+    }} variant="contained">
+      OK
+    </Button>
+  </DialogActions>
+</Dialog>
+
+
+<Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
+  <DialogTitle>Confirm Manual Sign-Off</DialogTitle>
+  <DialogContent>
+    Are you sure you want to save this manual sign-off?
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
+    <Button
+      onClick={async () => {
+        const { error } = await supabase
+          .from('sign_on_off_records')
+          .update({
+  sign_off_ba_result: signOffFormData.ba_result,
+  sign_off_ba_number: signOffFormData.ba_number,
+  sign_off_actual_time:signOffFormData.sign_off_time?.toISOString(),
+  sign_off_actual_location: signOffFormData.sign_off_location
+})
+
+          .eq('employee_id', selectedRow.employee_id)
+          .eq('sign_on_actual_time', selectedRow.sign_on_actual_time);
+
+        if (error) {
+          alert('Error saving sign-off');
+          console.error(error);
+        } else {
+          alert('Sign-off saved successfully');
+        }
+        setConfirmDialogOpen(false);
+      }}
+      color="primary"
+      variant="contained"
+    >
+      Confirm
+    </Button>
+  </DialogActions>
+</Dialog>
+
+
+
 
 
       {/* Sign-Offs */}
