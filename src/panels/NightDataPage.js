@@ -26,14 +26,6 @@ import dayjs from 'dayjs';
 
 
 
-// Check if time is in range, considering overnight wrap
-function isInRange(time, start, end) {
-  if (start > end) {
-    // crosses midnight
-    return time >= start || time <= end;
-  }
-  return time >= start && time <= end;
-}
 
 function NightDataPage() {
   const { employeeId } = useParams();
