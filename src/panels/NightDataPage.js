@@ -25,32 +25,6 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 
 
-const NIGHT_ALLOWANCES = [
-  {
-    label: "SignOn before 02:00 / SignOff after 01:00",
-    rate: 175,
-    start: 19 * 60,
-    end: 2 * 60,
-  },
-  {
-    label: "SignOn before 03:00 / SignOff after 00:00",
-    rate: 140,
-    start: 2 * 60 + 1,
-    end: 3 * 60,
-  },
-  {
-    label: "SignOn before 04:00 / SignOff after 23:00",
-    rate: 120,
-    start: 3 * 60 + 1,
-    end: 4 * 60,
-  },
-  {
-    label: "SignOn before 05:00 / SignOff after 23:00",
-    rate: 90,
-    start: 4 * 60 + 1,
-    end: 5 * 60,
-  },
-];
 
 // Check if time is in range, considering overnight wrap
 function isInRange(time, start, end) {
@@ -199,7 +173,7 @@ useEffect(() => {
           const dateObj = new Date(roster.saved_date);
 const rosterDate = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${dateObj.getFullYear()}`;
 
-         const savedDateObj = new Date(roster.saved_date);
+         
 
 const matchingRecord = recordsData.find((record) => {
   if (!record.sign_on_actual_time) return false;
